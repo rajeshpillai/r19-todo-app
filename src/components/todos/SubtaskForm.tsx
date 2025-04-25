@@ -1,6 +1,8 @@
 'use client';
 
-import { useFormState } from 'react-dom';
+import { useFormState, useFormStatus } from 'react-dom';
+import { useOptimistic } from 'react';
+
 import { useTodos } from '../../contexts/TodoContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -18,6 +20,16 @@ interface FormState {
   error?: string;
 }
 
+function SubmitButton({ isEditing }: { isEditing: boolean }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <Button type="submit" size="sm" disabled={pending}>
+      {pending ? 'Saving...' : isEditing ? 'Update' : 'Add'} Subtask
+    </Button>
+  );
+}
+
 export function SubtaskForm({
   todoId,
   initialValue,
@@ -30,7 +42,11 @@ export function SubtaskForm({
     updateSubtask: state.updateSubtask,
   }));
 
-  // Form action for React 19
+  const [optimisticState, addOptimisticSubtask] = useOptimistic(null, (prev, newSubtask: SubTask) => {
+    // You can trigger preview render here if needed
+    return newSubtask;
+  });
+
   async function handleSubmit(prevState: FormState, formData: FormData): Promise<FormState> {
     const content = formData.get('content')?.toString().trim();
 
@@ -38,16 +54,23 @@ export function SubtaskForm({
       return { error: 'Content is required' };
     }
 
+    const newSubtask = {
+      content,
+      completed: false,
+    };
+
+    // Optimistic update (preview)
+    addOptimisticSubtask(newSubtask);
+
     if (isEditing && initialValue) {
       updateSubtask(todoId, { ...initialValue, content });
     } else {
-      addSubtask(todoId, { content, completed: false });
+      addSubtask(todoId, newSubtask);
     }
 
-    // Trigger onSubmit after success
     if (onSubmit) onSubmit();
 
-    return {}; // no error
+    return {}; // Clear error
   }
 
   const [formState, formAction] = useFormState(handleSubmit, {});
@@ -74,9 +97,7 @@ export function SubtaskForm({
           </Button>
         )}
 
-        <Button type="submit" size="sm">
-          {isEditing ? 'Update' : 'Add'} Subtask
-        </Button>
+        <SubmitButton isEditing={isEditing} />
       </div>
     </form>
   );
